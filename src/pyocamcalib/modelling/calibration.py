@@ -28,6 +28,7 @@ from datetime import datetime
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from loguru import logger
+from scipy.spatial.distance import cdist
 
 from pyocamcalib.core._utils import get_reprojection_error_all, get_reprojection_error
 from pyocamcalib.core.linear_estimation import get_first_linear_estimate, get_taylor_linear
@@ -77,7 +78,9 @@ class CalibrationEngine:
             img = cv.imread(str(img_f))
             height, width = img.shape[:2]
             ratio = width / height
+            # image is downsized for faster but less accurate detection
             img_resize = cv.resize(img, (round(ratio * max_height), max_height))
+            # resize ratio is stored to be able to rescale the detected corner pixel coordinates
             r_h = height / max_height
             r_w = width / (ratio * max_height)
 
@@ -95,19 +98,32 @@ class CalibrationEngine:
 
                 if ret:
                     corners = np.squeeze(corners)
+                    # rescale the detected corner coordinates to the original image size
                     corners[:, 0] *= r_w
                     corners[:, 1] *= r_h
-                    win_size = (5, 5)
+                    
+                    # minimum distance between corners
+                    pairwise_distances = cdist(corners, corners, 'euclidean')
+                    # set the distance between a corner and itself to infinity (= all diagonal elements)
+                    np.fill_diagonal(pairwise_distances, np.inf)
+                    
+                    # let the subpixel refinement look in a search window with at most
+                    # half the minimum distance between two corners, so we don't accidentally
+                    # snap to a wrong corner because it is closer than the correct one
+                    win_size = int(np.min(pairwise_distances) / 2)
                     zero_zone = (-1, -1)
                     criteria = (cv.TERM_CRITERIA_EPS + cv.TermCriteria_COUNT, 40, 0.001)
                     corners = np.expand_dims(corners, axis=0)
-                    cv.cornerSubPix(gray, corners, win_size, zero_zone, criteria)
+                    cv.cornerSubPix(gray, corners, (win_size, win_size), zero_zone, criteria)
                     if check:
                         check_detection(np.squeeze(corners), img)
                     count += 1
                     self.detections[str(img_f)] = {"image_points": np.squeeze(corners)[::-1],
                                                    "world_points": np.squeeze(world_points)}
                     break
+        if check:
+            # Close the window created by check_detection
+            cv.destroyAllWindows()
 
         logger.info(f"Extracted chessboard corners with success = {count}/{len(images_path)}")
 
