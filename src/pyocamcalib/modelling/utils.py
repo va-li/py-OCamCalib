@@ -26,7 +26,7 @@ from threading import Thread
 from time import sleep
 import numpy as np
 
-IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.PNG']
+IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif', '.tiff', '.PNG']
 
 
 def transform(extrinsics: np.array, world_points: np.array):
@@ -152,7 +152,7 @@ def check_detection(corners, image):
     write_text(image_draw, text_1)
     for corner in corners:
         cv.drawMarker(image_draw, tuple(corner.astype(int)), (0, 255, 0))
-    cv.namedWindow("image", 2)
+    cv.namedWindow("image", cv.WINDOW_NORMAL)
     cv.imshow('image', image_draw)
     params = [image_draw, mode_draw, mode_select, corners, idx, new_corners, wait]
     cv.setMouseCallback('image', click_event, params)
@@ -182,11 +182,10 @@ def check_detection(corners, image):
         # press 'z' to quit
         if k == ord('z'):
             break
-    cv.destroyAllWindows()
 
     if (len(idx) == len(new_corners)) and len(idx) != 0:
         corners[idx] = new_corners
-        cv.namedWindow("Modified pattern", 2)
+        cv.namedWindow("Modified pattern", cv.WINDOW_KEEPRATIO)
         image_draw_2 = image.copy()
         write_text(image_draw_2, text_2)
         for corner in corners:
