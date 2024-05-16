@@ -20,6 +20,7 @@
 from typing import Tuple, List
 import numpy as np
 from pyocamcalib.modelling.camera import Camera
+from pyocamcalib.modelling.utils import get_incident_angle, transform
 
 
 def check_origin(R: np.array, T: np.array) -> np.array:
@@ -53,6 +54,8 @@ def get_reprojection_error_all(data: dict, valid: List[bool], extrinsics_t: np.a
                                distortion_center: Tuple[float, float], stretch_matrix: np.array = np.eye(2)):
     rms_mean_list = []
     rms_std_list = []
+    reprojection_errors_list = []
+    incident_angles_rad_list = []
     counter = 0
 
     for idx, img_path in enumerate(sorted(data.keys())):
@@ -60,11 +63,23 @@ def get_reprojection_error_all(data: dict, valid: List[bool], extrinsics_t: np.a
             image_points = np.array(data[img_path]['image_points'])
             world_points = np.array(data[img_path]['world_points'])
             extrinsics = extrinsics_t[counter]
-            rms_mean, rms_std, _ = get_reprojection_error(image_points, world_points, taylor_coefficient,
-                                                          extrinsics, distortion_center, stretch_matrix)
+            
+            rms_mean, rms_std, reprojected_image_points = get_reprojection_error(image_points, world_points, taylor_coefficient,
+                                                                  extrinsics, distortion_center, stretch_matrix)
             counter += 1
+            
+            # error between reprojected image points and image points in both x and y axis
+            reprojection_errors = reprojected_image_points - image_points
+            
+            # world points are not yet in the camera frame
+            # so first transform them to the camera frame using the estimated extrinsic rotation and translation (extrinsics)
+            world_points_c = transform(extrinsics, world_points)
+            # get the incident angles of the world points in the camera frame
+            incident_angles_rad = get_incident_angle(world_points_c)
 
+            reprojection_errors_list.append(reprojection_errors)
+            incident_angles_rad_list.append(incident_angles_rad)
             rms_mean_list.append(rms_mean)
             rms_std_list.append(rms_std)
 
-    return np.mean(rms_mean_list), rms_mean_list, rms_std_list
+    return np.mean(rms_mean_list), rms_mean_list, rms_std_list, reprojection_errors_list, incident_angles_rad_list
