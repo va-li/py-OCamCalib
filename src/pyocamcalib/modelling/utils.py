@@ -64,7 +64,7 @@ def get_files(path):
     all_files = []
     for ext in IMG_EXTENSIONS:
         all_files.extend(list(path.glob("*" + ext)))
-    return all_files
+    return sorted(all_files)
 
 
 def generate_checkerboard_points(board_size: Tuple[int, int], square_size: float = 1, z_axis: bool = False):

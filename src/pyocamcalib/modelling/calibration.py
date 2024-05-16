@@ -21,7 +21,7 @@ import json
 import pickle
 from itertools import product
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Union
 import cv2 as cv
 import numpy as np
 from datetime import datetime
@@ -67,14 +67,14 @@ class CalibrationEngine:
         self.cam_name = camera_name
         self.inverse_poly = None
 
-    def detect_corners(self, check: bool = False, max_height: int = 520):
+    def detect_corners(self, check: bool = False, window_size: Union[str, int] = "adaptive", max_height: int = 520):
         images_path = get_files(self.working_dir)
         count = 0
         world_points = generate_checkerboard_points(self.chessboard_size, self.square_size, z_axis=True)
 
         logger.info("Start corners extraction")
 
-        for img_f in tqdm(sorted(images_path)):
+        for img_f in tqdm(images_path):
             img = cv.imread(str(img_f))
             height, width = img.shape[:2]
             ratio = width / height
@@ -102,19 +102,28 @@ class CalibrationEngine:
                     corners[:, 0] *= r_w
                     corners[:, 1] *= r_h
                     
-                    # minimum distance between corners
-                    pairwise_distances = cdist(corners, corners, 'euclidean')
-                    # set the distance between a corner and itself to infinity (= all diagonal elements)
-                    np.fill_diagonal(pairwise_distances, np.inf)
+                    if window_size == "adaptive":
+                        # calculate distance between all corners, returns a len(corners) x len(corners) matrix
+                        pairwise_distances = cdist(corners, corners, 'euclidean')
+                        
+                        # keep only _one_ distance for each pair of corners, and discard distances between a corner and itself
+                        # which means taking only the upper triangular part of the matrix
+                        pairwise_distances = pairwise_distances[np.triu_indices(pairwise_distances.shape[0], k=1)]
                     
-                    # let the subpixel refinement look in a search window with at most
-                    # half the minimum distance between two corners, so we don't accidentally
-                    # snap to a wrong corner because it is closer than the correct one
-                    win_size = int(np.min(pairwise_distances) / 2)
+                        # the minimum distance between any two corners should give us a good estimate of the window size
+                        distance_min = np.min(pairwise_distances)
+                        
+                        # then we use half the minimum distance as the window size
+                        # also the window size must be an integer, so the we truncate it towards zero
+                        win_size = max(int(distance_min / 2), 5)
+                    else:
+                        win_size = window_size
+                        
                     zero_zone = (-1, -1)
                     criteria = (cv.TERM_CRITERIA_EPS + cv.TermCriteria_COUNT, 40, 0.001)
                     corners = np.expand_dims(corners, axis=0)
                     cv.cornerSubPix(gray, corners, (win_size, win_size), zero_zone, criteria)
+                    
                     if check:
                         check_detection(np.squeeze(corners), img)
                     count += 1
@@ -150,6 +159,12 @@ class CalibrationEngine:
         valid_pattern, d_center, min_rms, extrinsics_t, taylor_t = get_first_linear_estimate(self.detections,
                                                                                              self.sensor_size,
                                                                                              grid_size)
+        
+        # the linear estimation can fail, when the images are not good enough
+        if valid_pattern == None or not any(valid_pattern):
+            loader.stop()
+            logger.error("Linear estimation failed of parameters failed. Check the chessboard detection in the supplied calibartion images!")
+            raise ValueError("Linear estimation failed of parameters failed.")
 
         taylor_coefficient, extrinsics_t = get_taylor_linear(self.detections, valid_pattern, extrinsics_t, d_center)
         loader.stop()
