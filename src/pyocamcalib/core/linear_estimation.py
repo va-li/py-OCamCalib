@@ -24,7 +24,7 @@ from pyocamcalib.core.intrinsec import intrinsic_linear_estimate
 from pyocamcalib.core._utils import check_origin, get_reprojection_error
 
 
-def independente_calibration(data: dict, distortion_center: Tuple[float, float] = None):
+def independente_calibration(data: dict, distortion_center: Tuple[float, float]):
     # This is used as a threshold for the _standard deviation_ of the reprojection errors.
     # It seems no calibration is possible, if this is exceeded for every image.
     reprojection_error_threshold = 10.
@@ -38,10 +38,10 @@ def independente_calibration(data: dict, distortion_center: Tuple[float, float] 
         image_points = np.array(data[img_path]['image_points'])
         world_points = np.array(data[img_path]['world_points'])
 
-        R_part, T_part = partial_extrinsics(image_points, world_points, img_size=(2160, 3840),
+        R_part, T_part = partial_extrinsics(image_points, world_points,
                                             distortion_center=distortion_center)
 
-        RR = get_full_rotation_matrix(R_part, T_part, image_points, img_size=(2160, 3840),
+        RR = get_full_rotation_matrix(R_part, T_part, image_points,
                                       distortion_center=distortion_center)
 
         min_error = float('inf')

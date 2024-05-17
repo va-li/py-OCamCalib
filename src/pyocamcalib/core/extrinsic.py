@@ -21,8 +21,8 @@ from typing import Tuple
 import numpy as np
 
 
-def partial_extrinsics(image_points: np.array, world_points: np.array, img_size: Tuple[int, int],
-                       distortion_center: Tuple[float, float] = None) -> np.array:
+def partial_extrinsics(image_points: np.array, world_points: np.array,
+                       distortion_center: Tuple[float, float]) -> np.array:
     """
     The partial extrinsics parameters stack in the vector H are estimated by minimizing
     the least-squares criterion ||MH||^2 subject to ||H||^2 = 1. This is accomplished by
@@ -38,13 +38,8 @@ def partial_extrinsics(image_points: np.array, world_points: np.array, img_size:
     :param distortion_center:
     """
     image_points_c = image_points.copy()
-    if distortion_center:
-        image_points_c[:, 0] -= distortion_center[0]
-        image_points_c[:, 1] -= distortion_center[1]
-    else:
-        center_x, center_y = img_size[1] / 2, img_size[0] / 2
-        image_points_c[:, 0] -= center_x
-        image_points_c[:, 1] -= center_y
+    image_points_c[:, 0] -= distortion_center[0]
+    image_points_c[:, 1] -= distortion_center[1]
 
     M = np.stack([- image_points_c[:, 1] * world_points[:, 0],
                   - image_points_c[:, 1] * world_points[:, 1],
@@ -63,8 +58,8 @@ def partial_extrinsics(image_points: np.array, world_points: np.array, img_size:
     return R_part, T_part
 
 
-def get_full_rotation_matrix(R_part: np.array, T_part: np.array, image_points, img_size: Tuple[int, int],
-                             distortion_center: Tuple[float, float] = None):
+def get_full_rotation_matrix(R_part: np.array, T_part: np.array, image_points,
+                             distortion_center: Tuple[float, float]):
     """
     Given the scaled `2 x 2` submatrix of a `3 x 3` rotation matrix
     and the scaled `(x, y)` components of a 3d translation vector
@@ -77,13 +72,8 @@ def get_full_rotation_matrix(R_part: np.array, T_part: np.array, image_points, i
     :param distortion_center:
     """
     image_points_c = image_points.copy()
-    if distortion_center:
-        image_points_c[:, 0] -= distortion_center[0]
-        image_points_c[:, 1] -= distortion_center[1]
-    else:
-        center_x, center_y = img_size[1] / 2, img_size[0] / 2
-        image_points_c[:, 0] -= center_x
-        image_points_c[:, 1] -= center_y
+    image_points_c[:, 0] -= distortion_center[0]
+    image_points_c[:, 1] -= distortion_center[1]
 
     A = (R_part[0, 0] * R_part[0, 1] + R_part[1, 0] * R_part[1, 1]) ** 2
     B = R_part[0, 0] ** 2 + R_part[1, 0] ** 2
