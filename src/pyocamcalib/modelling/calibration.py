@@ -21,7 +21,7 @@ import json
 import pickle
 from itertools import product
 from pathlib import Path
-from typing import Tuple, Union, Optional
+from typing import Tuple, Union, Optional, List
 import cv2 as cv
 import numpy as np
 from datetime import datetime
@@ -216,12 +216,7 @@ class CalibrationEngine:
         self.rms_mean_list = rms_mean_list
         self.rms_std_list = rms_std_list
 
-    def get_chessboard_position(self, save: bool = False):
-        """
-        Write the four vertices of each chessboard in camera's coordinate system.
-        :param save:
-        :return: x
-        """
+    def get_chessboard_points_in_camera_system(self):
         if not self.detections:
             raise ValueError(
                 'Detections is empty. You first need to detect corners in several chessboard images or '
@@ -231,20 +226,20 @@ class CalibrationEngine:
             raise ValueError('Extrinsics parameters are empty. You first need to calibrate camera.')
 
         world_points = generate_checkerboard_points(self.chessboard_size, self.square_size, z_axis=True)
-        world_points = world_points[[0,
-                                     self.chessboard_size[0] * (self.chessboard_size[1] - 1),
-                                     self.chessboard_size[0] * self.chessboard_size[1] - 1,
-                                     self.chessboard_size[0] - 1], :]
         world_points_c = []
 
         for r in self.extrinsics_t:
-            world_points_c.append(transform(r, world_points).tolist())
-
-        if save:
-            with open('./../checkpoints/chessboard_position.json', 'w') as f:
-                json.dump(world_points_c, f, indent=4)
+            world_points_c.append(transform(r, world_points))
 
         return world_points_c
+    
+    def get_valid_image_paths(self) -> List[str]:
+        """Return the list of valid image paths, i.e. the images that were successfully detected and a linear estimate of the rotation and translation was found.
+
+        Returns:
+            List[str]: List of valid image paths, each corresponding to the extrinsics, errors, etc with the same index in the lists.
+        """
+        return [img_path for img_path, valid in zip(self.detections.keys(), self.valid_pattern) if valid]
 
     def show_reprojection(self, save_directory: Optional[str] = None):
 
@@ -257,60 +252,58 @@ class CalibrationEngine:
             raise ValueError(
                 'Camera parameters are empty. You first need to perform calibration or load calibration file.')
 
-        counter = 0
-        for id_im, img_path in enumerate(sorted(self.detections.keys())):
-            if self.valid_pattern[id_im]:
-                image_points = np.array(self.detections[img_path]['image_points'])
-                world_points = np.array(self.detections[img_path]['world_points'])
-                extrinsics = self.extrinsics_t[counter]
+        for i, img_path in enumerate(self.get_valid_image_paths()):
+            image_points = np.array(self.detections[img_path]['image_points'])
+            world_points = np.array(self.detections[img_path]['world_points'])
+            extrinsics = self.extrinsics_t[i]
 
-                im = cv.imread(str(img_path))
-                h, w = im.shape[:2]
-                im_center = (w / 2, h / 2)
+            im = cv.imread(str(img_path))
+            h, w = im.shape[:2]
+            im_center = (w / 2, h / 2)
 
-                re_mean, re_std, reprojected_image_points = get_reprojection_error(image_points, world_points,
-                                                                                   self.taylor_coefficient, extrinsics,
-                                                                                   self.distortion_center,
-                                                                                   self.stretch_matrix)
-                ratio = w / h
-                fig_size_x = 20
-                fig_size_y = fig_size_x / ratio
-                plt.figure(figsize=(fig_size_x, fig_size_y))
-                plt.imshow(im[:, :, [2, 1, 0]])
-                plt.scatter(image_points[:, 0], image_points[:, 1], marker="+", c="g", label="detected points")
-                plt.scatter(reprojected_image_points[:, 0], reprojected_image_points[:, 1], marker="x", c="r",
-                            label="reprojected points")
-                plt.scatter(self.distortion_center[0], self.distortion_center[1], c='m', s=20,
-                            label="distortion_center")
-                plt.scatter(im_center[0], im_center[1], c='c', s=20, label="image center")
-                plt.title(
-                    f"Linear estimate solution (Reprojection error $ \mu $ = {re_mean:0.2f} $\sigma$ = {re_std:0.2f}). "
-                    f"Distortion center = ({self.distortion_center[0]:0.2f}, {self.distortion_center[1]:0.2f})")
-                plt.legend()
-                
-                if save_directory:
-                    if not (Path(save_directory) / 'reprojections').exists():
-                        (Path(save_directory) / 'reprojections').mkdir(parents=False, exist_ok=True)
-                    else:
-                        plt.savefig(Path(save_directory) / 'reprojections' / f"reprojection_{Path(img_path).stem}.png", dpi=DPI)
-                
-                plt.show()
-                counter += 1
+            re_mean, re_std, reprojected_image_points = get_reprojection_error(image_points, world_points,
+                                                                                self.taylor_coefficient, extrinsics,
+                                                                                self.distortion_center,
+                                                                                self.stretch_matrix)
+            ratio = w / h
+            fig_size_x = 20
+            fig_size_y = fig_size_x / ratio
+            plt.figure(figsize=(fig_size_x, fig_size_y))
+            plt.imshow(im[:, :, [2, 1, 0]])
+            plt.scatter(image_points[:, 0], image_points[:, 1], marker="+", c="g", label="detected points")
+            plt.scatter(reprojected_image_points[:, 0], reprojected_image_points[:, 1], marker="x", c="r",
+                        label="reprojected points")
+            plt.scatter(self.distortion_center[0], self.distortion_center[1], c='m', s=20,
+                        label="distortion_center")
+            plt.scatter(im_center[0], im_center[1], c='c', s=20, label="image center")
+            plt.title(
+                f"Linear estimate solution (Reprojection error $ \mu $ = {re_mean:0.2f} $\sigma$ = {re_std:0.2f}). "
+                f"Distortion center = ({self.distortion_center[0]:0.2f}, {self.distortion_center[1]:0.2f})")
+            plt.legend()
+            
+            if save_directory:
+                if not (Path(save_directory) / 'reprojections').exists():
+                    (Path(save_directory) / 'reprojections').mkdir(parents=False, exist_ok=True)
+                else:
+                    plt.savefig(Path(save_directory) / 'reprojections' / f"reprojection_{Path(img_path).stem}.png", dpi=DPI)
+            
+            plt.show()
                 
     def show_mean_reprojection_error(self, save_directory: Optional[str] = None):
 
         plt.figure(figsize=FIG_SIZE)
-        labels = [Path(img_path).name for img_path in self.detections.keys()]
         plt.bar(np.arange(len(self.rms_mean_list)), self.rms_mean_list, yerr=self.rms_std_list, align='center',
-                alpha=0.5, ecolor='black', capsize=10, tick_label=labels)
+                alpha=0.5, ecolor='black', capsize=10, tick_label=[Path(p).name for p in self.get_valid_image_paths()])
         plt.axhline(self.rms_overall, color='g', linestyle='--', label=f"Overall RMS = {self.rms_overall:0.2f}")
         plt.xticks(rotation=90)
         plt.ylabel('Mean Error in Pixels')
         plt.xlabel("Images")
         plt.title(f'Mean Reprojection Error per Image {self.cam_name}')
         plt.legend()
+        
         if save_directory:
             plt.savefig(Path(save_directory) / f"Mean_reprojection_error_{self.cam_name}.png", dpi=DPI)
+        
         plt.show()
     
     def show_reporjection_error_scatter(self, save_directory: Optional[str] = None):
@@ -328,19 +321,20 @@ class CalibrationEngine:
                 'Camera parameters are empty. You first need to perform calibration or load calibration file.')
         
         plt.figure(figsize=FIG_SIZE)
-        for i, errors in enumerate(self.reprojection_errors_list):
+        for i, (errors, image_path) in enumerate(zip(self.reprojection_errors_list, self.get_valid_image_paths())):
             # when the number of images is greater than 10, we change the marker style 
             marker = ['o', 'x', '+', '*'][i // 10]
-            plt.scatter(errors[:, 0], errors[:, 1], marker=marker)
+            plt.scatter(errors[:, 0], errors[:, 1], marker=marker, label=Path(image_path).name)
             
         plt.xlabel("Error in x direction (pixels)")
         plt.ylabel("Error in y direction (pixels)")
         plt.title(f"Reprojection error scatter plot for {self.cam_name}")
         plt.grid()
-        plt.legend([Path(img_path).name for img_path in self  .detections.keys()])
+        plt.legend()
         
         if save_directory is not None:
             plt.savefig(Path(save_directory) / f"Reprojection_error_scatter_{self.cam_name}.png", dpi=DPI)
+        
         plt.show()
         
     def show_reporjection_error_by_angle(self, save_directory: Optional[str] = None):
@@ -360,19 +354,53 @@ class CalibrationEngine:
         # calculate the length of each error vector (sqrt(x^2 + y^2)) and plot it against the incident angle in degrees
         
         plt.figure(figsize=FIG_SIZE)
-        for i, (errors, angles) in enumerate(zip(self.reprojection_errors_list, self.incident_angles_rad_list)):
+        for i, (errors, angles, image_path) in enumerate(zip(self.reprojection_errors_list, self.incident_angles_rad_list, self.get_valid_image_paths())):
             distances = np.linalg.norm(errors, axis=1)
             # when the number of images is greater than 10, we change the marker style 
             marker = ['o', 'x', '+', '*'][i // 10]
-            plt.scatter(np.degrees(angles), distances, marker=marker)
+            plt.scatter(np.degrees(angles), distances, marker=marker, label=Path(image_path).name)
             
         plt.xlabel("Incident angle (degrees)")
         plt.ylabel("Error distance (pixels)")
         plt.title(f"Reprojection error by incident angle for {self.cam_name}")
-        plt.legend([Path(img_path).name for img_path in self.detections.keys()])
+        plt.legend()
         plt.grid(True)
+        
         if save_directory:
             plt.savefig(Path(save_directory) / f"Reporjection_error_by_angle_{self.cam_name}.png", dpi=DPI)
+        
+        plt.show()
+        
+    def show_3d_chessboards(self, save_directory: Optional[str] = None):
+        """
+        Show the 3D chessboard in camera's coordinate system.
+        :return:
+        """
+        
+        if not self.detections:
+            raise ValueError(
+                'Detections is empty. You first need to detect corners in several chessboard images or '
+                'load a detection file.')
+            
+        if self.extrinsics_t is None or self.taylor_coefficient is None:
+            raise ValueError(
+                'Camera parameters are empty. You first need to perform calibration or load calibration file.')
+        
+        fig = plt.figure(figsize=FIG_SIZE)
+        ax = fig.add_subplot(projection='3d')
+        
+        chessboard_points = self.get_chessboard_points_in_camera_system()
+        valid_images = self.get_valid_image_paths()
+        
+        for i, (points, image_path) in enumerate(zip(chessboard_points, valid_images)):
+            marker = ['o', 'x', '+', '*'][i // 10]
+            ax.scatter(points[:, 0], points[:, 1], points[:, 2], marker=marker, label=Path(image_path).name)
+
+        plt.legend()
+        
+        if save_directory:
+            plt.savefig(Path(save_directory) / f"3D_chessboards_{self.cam_name}.png", dpi=DPI)
+        
         plt.show()
         
     def show_model_projection(self, save_directory: Optional[str] = None):
@@ -422,8 +450,10 @@ class CalibrationEngine:
         plt.title(f"Projection model of {self.cam_name}")
         plt.ylim([0, 1])
         plt.legend()
+        
         if save_directory:
             plt.savefig(Path(save_directory) / f"Model_projection_{self.cam_name}.png", dpi=DPI)
+        
         plt.show()
 
         return r_calibrated, theta

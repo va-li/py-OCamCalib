@@ -55,7 +55,7 @@ def main(working_dir: str,
     my_calib_engine.find_poly_inv()
     my_calib_engine.save_calibration()
     my_calib_engine.show_model_projection()
-    my_calib_engine.show_reprojection_error()
+    my_calib_engine.show_mean_reprojection_error()
     my_calib_engine.show_reprojection()
 
 
