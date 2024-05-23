@@ -392,9 +392,27 @@ class CalibrationEngine:
         chessboard_points = self.get_chessboard_points_in_camera_system()
         valid_images = self.get_valid_image_paths()
         
+        # axes_min_max will store the min and max values of any axis to set the limits of the plot
+        axes_min_max = [np.inf, -np.inf]
+        
         for i, (points, image_path) in enumerate(zip(chessboard_points, valid_images)):
+            # find the min and max values of any axis to set the limits of the plot
+            axes_min_max[0] = min(axes_min_max[0], points.min())
+            axes_min_max[1] = max(axes_min_max[1], points.max())
+            
             marker = ['o', 'x', '+', '*'][i // 10]
             ax.scatter(points[:, 0], points[:, 1], points[:, 2], marker=marker, label=Path(image_path).name)
+        
+        # set the labels and title of the plot
+        ax.set_xlabel('X [meters]')
+        ax.set_ylabel('Y [meters]')
+        ax.set_zlabel('Z [meters]')
+        ax.set_title(f"3D chessboard locations for {self.cam_name}")
+        
+        # set the limits of the plot to be the same for all axes
+        ax.set_xlim(axes_min_max)
+        ax.set_ylim(axes_min_max)
+        ax.set_zlim(axes_min_max)
 
         plt.legend()
         
