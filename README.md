@@ -19,52 +19,139 @@ The key features are:
 
 ## Installation
 
-```commandline
+### Quick Start with uv (Recommended)
+
+[`uv`](https://github.com/astral-sh/uv) is a fast Python package manager. This is the recommended way to set up the project.
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/jakarto3d/py-OCamCalib.git
 cd py-OCamCalib
 
-# for conda user 
-conda env create --file environment.yml
-conda activate py-OCamCalib
+# 2. Sync dependencies (creates .venv and installs all dependencies from pyproject.toml)
+uv sync
 
-# for virtualenv user 
-python3 -m venv env
-source env/bin/activate
-pip install -r requirements.txt
+# 3. Run calibration with uv
+uv run python -m pyocamcalib.script.calibration_script /path/to/chessboard/images 9 5 --camera-name mycam --square-size 35
 ```
+
+**Note**: `uv sync` will automatically create a virtual environment (`.venv/`) and install all dependencies defined in `pyproject.toml`. The package itself is installed in editable mode, so you can run the calibration scripts directly with `uv run`.
+
+### Expected Output (Successful Calibration)
+
+When running calibration, you should see output similar to this:
+
+```
+2026-04-22 13:15:38.103 | INFO     | pyocamcalib.modelling.calibration:detect_corners:78 - Start corners extraction
+100%|██████████| 30/30 [00:04<00:00,  7.32it/s]
+2026-04-22 13:15:42.810 | INFO     | pyocamcalib.modelling.calibration:detect_corners:140 - Extracted chessboard corners with success = 30/30
+2026-04-22 13:15:42.810 | INFO     | pyocamcalib.modelling.calibration:save_detection:146 - Detection file saved with success.
+⢿ INFO:: Start first linear estimation ...  ⡿
+2026-04-22 13:16:05.628 | INFO     | pyocamcalib.modelling.calibration:estimate_fisheye_parameters:180 - Linear estimation end with success 
+Linear RMS = 0.30 
+Distortion Center = (760.41, 422.72)
+Taylor_coefficient = [273.69, 0, -0.00162, 4.15e-06, -8.22e-09]
+⢿ INFO:: Start bundle adjustment  ...  ⡿
+2026-04-22 13:18:08.581 | INFO     | pyocamcalib.modelling.calibration:estimate_fisheye_parameters:208 - Bundle Adjustment end with success 
+Optimize rms = 0.18 
+Distortion Center = (760.43, 422.55)
+Taylor_coefficient = [2.74e+02, 0.0, -1.61e-03, 4.16e-06, -8.24e-09]
+2026-04-22 13:18:08.590 | INFO     | pyocamcalib.modelling.calibration:find_poly_inv:544 - Poly fit end with success.
+2026-04-22 13:18:08.590 | INFO     | pyocamcalib.modelling.calibration:find_poly_inv:545 - Reprojection Error : 0.0090
+2026-04-22 13:18:08.590 | INFO     | pyocamcalib.modelling.calibration:find_poly_inv:546 - Reprojection polynomial degree: 16
+```
+
+**Success indicators:**
+- ✅ All images detected: `Extracted chessboard corners with success = 30/30`
+- ✅ Low reprojection error: `Optimize rms = 0.18` (good calibration is typically < 0.5 pixels)
+- ✅ Inverse polynomial fitted: `Reprojection Error : 0.0090`
+
+**Output files created:**
+```
+output/<camera-name>/
+├── calibration/
+│   └── calibration_<camera-name>.json    # Calibration parameters
+├── corners_detection/
+│   └── corner_detections_<camera-name>.pickle
+├── reprojections/
+│   └── reprojection_*.png                 # Per-image reprojection overlays
+├── Mean_reprojection_error_<camera-name>.png
+└── Model_projection_<camera-name>.png
+```
+
+### Alternative: pip with virtualenv (No uv required)
+
+For users who prefer standard Python tooling, you can set up the project using `pip` and `venv`:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/jakarto3d/py-OCamCalib.git
+cd py-OCamCalib
+
+# 2. Create a virtual environment (requires Python 3.13+)
+python3.13 -m venv .venv
+
+# 3. Activate the virtual environment
+# On Linux/macOS:
+source .venv/bin/activate
+# On Windows:
+# .venv\Scripts\activate
+
+# 4. Install dependencies from requirements.txt (pinned versions)
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# 5. Install the package in editable mode
+pip install -e .
+
+# 6. Verify installation
+python -c "import pyocamcalib; print('Py-OCamCalib ready!')"
+
+# 7. Run calibration
+python -m pyocamcalib.script.calibration_script /path/to/chessboard/images 9 5 --camera-name mycam --square-size 35
+```
+
+**Note**: This project requires **Python 3.13 or later**. The `requirements.txt` file contains pinned dependency versions for reproducible installations.
 
 ## Example
-./test_images contains images of chessboard pattern taken from three differences fisheye lens.
-You can use it to test the project.
 
-### Use case 1 : Automatic detection and no check 
-```commandline
-python calibration_script.py ./../../test_images/fish_1 8 6  --camera-name fisheye_1
+./test_images contains images of chessboard pattern taken from three different fisheye lenses.
+You can use them to test the project.
+
+**Note**: When using uv, run commands with `uv run python -m pyocamcalib.script.calibration_script` instead of `python calibration_script.py`.
+
+### Use case 1: Automatic detection (no manual check)
+
+```bash
+# With uv
+uv run python -m pyocamcalib.script.calibration_script ./test_images/fish_1 8 6 --camera-name fisheye_1
+
+# Without uv (if using conda/virtualenv)
+python -m pyocamcalib.script.calibration_script ./test_images/fish_1 8 6 --camera-name fisheye_1
 ```
 
-### Use case 2 : Automatic detection and check 
-```commandline
-python calibration_script.py ./../../test_images/fish_1 8 6  --camera-name fisheye_1 --check
+### Use case 2: Automatic detection with manual verification
+
+```bash
+uv run python -m pyocamcalib.script.calibration_script ./test_images/fish_1 8 6 --camera-name fisheye_1 --check
 ```
-⚠️**Manual corners verification is not verify intuitive !**
+
+⚠️ **Manual corner verification is not very intuitive!**
 
 *Instructions*:
 
-Once the opencv windows is opened, you can enter in two different mode : SELECTION MODE and DRAW MODE.
+Once the OpenCV window opens, you can enter two different modes: SELECTION MODE and DRAW MODE.
  
- **SELECTION MODE**: Press 's' to enter the mode. Selection mode allows you to select points that have not been detected
- accurately. After pressing 's' you can surround such point with bounding box by pressing left mouse, drawing
- bounding boxes **AND** confirm by pressing enter. Once you select all your points, you have to quit selection mode by
- pressing 'esc'. Selected points should appear RED. 
+ - **SELECTION MODE**: Press 's' to enter. This allows you to select points that were not detected accurately. After pressing 's', surround such points with a bounding box by pressing the left mouse button, draw the bounding boxes, **AND** confirm by pressing Enter. Once you've selected all your points, quit selection mode by pressing 'esc'. Selected points should appear in RED.
 
- **DRAW MODE**: Press 'd' each time you want draw the new point and click to drop off your modified points. New point 
- have to be drawn in same order then selected points.
+ - **DRAW MODE**: Press 'd' each time you want to draw a new point, then click to place your modified points. New points must be drawn in the same order as the selected points.
 
- When work is done, press 'z' to quit. A windows with your modified pattern should appear.
+ When done, press 'z' to quit. A window with your modified pattern should appear.
 
-### Use case 3 : Load corners from file  
-```commandline
-python calibration_script.py ./../../test_images/fish_1 8 6  --camera-name fisheye_1 --corners-path ./../checkpoints/corners_detection/detections_fisheye_1_09092022_053310.pickle
+### Use case 3: Load corners from file
+
+```bash
+uv run python -m pyocamcalib.script.calibration_script ./test_images/fish_1 8 6 --camera-name fisheye_1 --corners-path ./checkpoints/corners_detection/detections_fisheye_1_09092022_053310.pickle
 ```
 
 ## Some notes about the implementation and the camera model (WIP)
@@ -157,8 +244,14 @@ That why I prefer to talk about Image projection CONVERSION than "UNDISTORTION" 
   <img src="./docs/conversion_perspective_projection.png" width="317" />
 </p>
 
-```commandline
-python projection_conversion_script.py ../../../test_images/fish_1/Fisheye1_1.jpg ../checkpoints/calibration/calibration_fisheye_1_18052022_154907.json 80 700 700
+```bash
+# With uv
+uv run python -m pyocamcalib.script.projection_conversion_script ../../../test_images/fish_1/Fisheye1_1.jpg ../checkpoints/calibration/calibration_fisheye_1_18052022_154907.json 80 700 700
+
+# Without uv
+python -m pyocamcalib.script.projection_conversion_script ../../../test_images/fish_1/Fisheye1_1.jpg ../checkpoints/calibration/calibration_fisheye_1_18052022_154907.json 80 700 700
 ```
+
+**Arguments**: `<fisheye_image> <calibration_json> <fov_degrees> <output_height> <output_width>`
 
 

@@ -18,6 +18,7 @@
 """
 from pyocamcalib.modelling.calibration import CalibrationEngine
 import typer
+from pathlib import Path
 
 
 def main(working_dir: str,
@@ -41,22 +42,30 @@ def main(working_dir: str,
     chessboard square unit. Otherwise, if chessboard square side is 30 mm for example, calibration will be done in mm.
     :return:
     """
-
+    
     chessboard_size = (chessboard_size_row, chessboard_size_column)
     my_calib_engine = CalibrationEngine(working_dir, chessboard_size, camera_name, square_size)
+    
+    # Create output directories
+    output_base = Path("./output") / camera_name
+    output_base.mkdir(parents=True, exist_ok=True)
+    corners_dir = output_base / "corners_detection"
+    calib_dir = output_base / "calibration"
+    corners_dir.mkdir(parents=True, exist_ok=True)
+    calib_dir.mkdir(parents=True, exist_ok=True)
 
     if corners_path is None:
         my_calib_engine.detect_corners(check=check)
-        my_calib_engine.save_detection()
+        my_calib_engine.save_detection(str(corners_dir))
     else:
         my_calib_engine.load_detection(corners_path)
 
     my_calib_engine.estimate_fisheye_parameters()
     my_calib_engine.find_poly_inv()
-    my_calib_engine.save_calibration()
-    my_calib_engine.show_model_projection()
-    my_calib_engine.show_mean_reprojection_error()
-    my_calib_engine.show_reprojection()
+    my_calib_engine.save_calibration(str(calib_dir))
+    my_calib_engine.show_model_projection(save_directory=str(output_base))
+    my_calib_engine.show_mean_reprojection_error(save_directory=str(output_base))
+    my_calib_engine.show_reprojection(save_directory=str(output_base))
 
 
 if __name__ == "__main__":
