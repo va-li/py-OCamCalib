@@ -1,132 +1,63 @@
-# Py-OCamCalib Calibration Guide (for Windows)
+# Py-OCamCalib Calibration Guide
 
-This guide walks you through the complete process of calibrating a fisheye or omnidirectional camera on Windows, from initial setup to analyzing calibration results.
+This guide walks you through the complete process of calibrating a fisheye or omnidirectional camera, from initial setup to analyzing calibration results. It works on both Linux and Windows.
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Step 1: Install Python](#step-1-install-python)
-3. [Step 2: Clone the Repository](#step-2-clone-the-repository)
-4. [Step 3: Set Up the Project](#step-3-set-up-the-project)
-5. [Step 4: Prepare Calibration Images](#step-4-prepare-calibration-images)
-6. [Step 5: Run Calibration](#step-5-run-calibration)
-7. [Step 6: Analyze Results](#step-6-analyze-results)
-8. [Troubleshooting](#troubleshooting)
+2. [Step 1: Clone the Repository](#step-1-clone-the-repository)
+3. [Step 2: Set Up the Project](#step-2-set-up-the-project)
+4. [Step 3: Prepare Calibration Images](#step-3-prepare-calibration-images)
+5. [Step 4: Run Calibration](#step-4-run-calibration)
+6. [Step 5: Analyze Results](#step-5-analyze-results)
 
 ---
 
 ## Prerequisites
 
-- Windows 10 or Windows 11
-- Administrator access (for installing Python)
-- A set of images of a chessboard pattern taken with your fisheye camera (see Step 4 for examples)
+- **Python 3.13 or later** installed and on your `PATH`.
+- **uv** installed. See the official [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+- **Git** installed.
+- A set of images of a chessboard pattern taken with your fisheye camera (see Step 3 for examples).
 
 ---
 
-## Step 1: Install Python
+## Step 1: Clone the Repository
 
-Py-OCamCalib requires **Python 3.13 or later**.
+Open a terminal (Linux) or PowerShell (Windows), navigate to where you want to store the project, and clone it:
 
-1. Go to [python.org/downloads](https://www.python.org/downloads/)
-2. Download the latest Python 3.13+ installer for Windows
-3. Run the installer
-4. **Important**: Check the box **"Add Python to PATH"** before clicking "Install Now"
-5. Verify installation by opening Command Prompt or PowerShell and typing:
-
-```powershell
-python --version
-```
-
-You should see something like: `Python 3.13.5`
-
----
-
-## Step 2: Clone the Repository
-
-1. Open PowerShell or Command Prompt
-2. Navigate to where you want to store the project:
-
-```powershell
-cd C:\Users\YourUsername\Projects
-```
-
-3. Clone the repository:
-
-```powershell
+```bash
 git clone https://github.com/jakarto3d/py-OCamCalib.git
 cd py-OCamCalib
 ```
 
-**Note**: If you don't have Git installed, you can download it from [git-scm.com](https://git-scm.com/download/win) or download the repository as a ZIP file and extract it.
+---
+
+## Step 2: Set Up the Project
+
+From the project directory, let uv create the virtual environment and install all dependencies (including Py-OCamCalib itself):
+
+```bash
+uv sync
+```
+
+That single command reads `pyproject.toml` and `uv.lock`, creates a `.venv`, and installs everything needed. You do not need to activate the environment manually — `uv run` (used in Step 4) does that for you.
 
 ---
 
-## Step 3: Set Up the Py-OCamCalib
+## Step 3: Prepare Calibration Images
 
-1. Open PowerShell in the project directory
-
-2. Create a virtual environment:
-
-```powershell
-python -m venv .venv
-```
-
-3. Activate the virtual environment:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-**Note**: If you get an execution policy error, run:
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-You should see `(.venv)` at the beginning of your command prompt.
-
-4. Upgrade pip:
-
-```powershell
-python -m pip install --upgrade pip
-```
-
-5. Install dependencies from requirements.txt:
-
-```powershell
-pip install -r requirements.txt
-```
-
-This will install all packages required for Py-OCamCalib.
-
-6. Install Py-OCamCalib in editable mode:
-
-```powershell
-pip install -e .
-```
-
-7. Verify the installation:
-
-```powershell
-python -c "import pyocamcalib; print('Py-OCamCalib is ready!')"
-```
-
-You should see: `Py-OCamCalib is ready!`
-
----
-
-## Step 4: Prepare Calibration Images
-
-### 4.1 Ensure you have good calibration images
+### 3.1 Ensure you have good calibration images
 
 Take 20-30 photos of the chessboard with your fisheye camera:
 
 **Tips for good calibration images:**
 
 - Use a chessboard pattern with e.g. 10x6 squares (9x5 inner corners).
-  
-  The exact number is not relevant, but make sure that you have a short side with N and the lon side with at least N+3 squares. This ensures that the automatic corner detection can find the orientation of the chessboard, because the long side has more corners than what can fit on the short side.
+
+  The exact number is not relevant, but make sure that you have a short side with N and the long side with at least N+3 squares. This ensures that the automatic corner detection can find the orientation of the chessboard, because the long side has more corners than what can fit on the short side.
 - Take images from various angles.
-  
+
   Try to take images that together cover the entire field of view of the camera. But do not try to cover a large area with a single image, because the automatic detection of the corners is more likely to fail if the chessboard is strongly distorted and more images give more calibration points for the optimization.
 - Do not obstruct the chessboard with your hand or other objects.
 - Hold steady and ensure the chessboard is in focus.
@@ -139,35 +70,33 @@ Take 20-30 photos of the chessboard with your fisheye camera:
 
 *Figure: Example calibration images*
 
-### 4.3 Organize Images
+### 3.2 Organize Images
 
-1. Create a folder for your calibration images:
-
-```powershell
-mkdir C:\Users\YourUsername\calibration-images
-```
-
-2. Copy all your calibration images to this folder
-3. Ensure images are in a supported format: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.tiff`
+1. Put all your calibration images in a single folder.
+2. Ensure images are in a supported format: `.jpg`, `.jpeg`, `.png`, `.bmp`, `.tiff`.
 
 ---
 
-## Step 5: Run Calibration
+## Step 4: Run Calibration
 
-### 5.1 Basic Calibration Command
+### 4.1 Basic Calibration Command
 
-1. Make sure the virtual environment is activated:
+Run the calibration script as a module with `uv run`. Replace the image folder path with your own.
 
-```powershell
-.venv\Scripts\Activate.ps1
+**Linux / macOS:**
+
+```bash
+uv run python -m pyocamcalib.script.calibration_script \
+  /path/to/calibration-images \
+  9 5 \
+  --camera-name my-camera \
+  --square-size 35
 ```
 
-You should see `(.venv)` at the beginning of your command prompt.
-
-2. Run the calibration:
+**Windows (PowerShell):**
 
 ```powershell
-python -m pyocamcalib.script.calibration_script `
+uv run python -m pyocamcalib.script.calibration_script `
   C:\Users\YourUsername\calibration-images `
   9 5 `
   --camera-name my-camera `
@@ -175,12 +104,12 @@ python -m pyocamcalib.script.calibration_script `
 ```
 
 **Parameters explained:**
-- `C:\Users\YourUsername\calibration-images` - Path to your images folder
+- `.../calibration-images` - Path to your images folder
 - `9 5` - Number of **inner corners** (9 columns, 5 rows) when the pattern has 10x6 squares
 - `--camera-name my-camera` - Name for your camera (used in output files)
 - `--square-size 35` - Size of one chessboard square in **millimeters**
 
-### 5.2 Expected Output
+### 4.2 Expected Output
 
 You should see output similar to this:
 
@@ -203,22 +132,24 @@ Taylor_coefficient = [2.74e+02, 0.0, -1.61e-03, 4.16e-06, -8.24e-09]
 2026-04-22 13:18:08.590 | INFO     | pyocamcalib.modelling.calibration:find_poly_inv:545 - Reprojection Error : 0.0090
 ```
 
+The bundle adjustment step can take over a minute. That is normal.
+
 **Success indicators:**
 - `Extracted chessboard corners with success = 30/30` - All images detected
 - `Optimize rms = 0.18` - Low reprojection error (< 0.5 is good)
 - `Reprojection Error : 0.0090` - Inverse polynomial fitted successfully
 
-### 5.3 Output Files
+### 4.3 Output Files
 
-After calibration, you'll find results in the `output\my-camera\` folder:
+After calibration, you'll find results in the `output/my-camera/` folder:
 
 ```
-output\my-camera\
-├── calibration\
+output/my-camera/
+├── calibration/
 │   └── calibration_my-camera.json    # Calibration parameters
-├── corners_detection\
+├── corners_detection/
 │   └── corner_detections_my-camera.pickle
-├── reprojections\
+├── reprojections/
 │   └── reprojection_*.png             # Per-image reprojection overlays
 ├── Mean_reprojection_error_my-camera.png
 └── Model_projection_my-camera.png
@@ -226,9 +157,9 @@ output\my-camera\
 
 ---
 
-## Step 6: Analyze Results
+## Step 5: Analyze Results
 
-### 6.1 Reprojection Error Plot
+### 5.1 Reprojection Error Plot
 
 Open `Mean_reprojection_error_my-camera.png` to see the reprojection error for each image:
 
@@ -241,7 +172,7 @@ Open `Mean_reprojection_error_my-camera.png` to see the reprojection error for e
 - **Individual bars**: Should be relatively uniform; outliers may indicate problematic images
 - **Error bars**: Show standard deviation; smaller is better
 
-### 6.2 Model Projection Plot
+### 5.2 Model Projection Plot
 
 Open `Model_projection_my-camera.png` to see how your camera's projection compares to ideal models:
 
@@ -253,9 +184,9 @@ Open `Model_projection_my-camera.png` to see how your camera's projection compar
 - The red curve should be smooth and monotonic
 - Comparison with canonical models (rectilinear, equidistant, etc.) shows your lens characteristics
 
-### 6.3 Reprojection Overlays
+### 5.3 Reprojection Overlays
 
-Open any image in `reprojections\` to see detected vs. reprojected corners:
+Open any image in `reprojections/` to see detected vs. reprojected corners:
 
 ![Reprojection Example](images/reprojection-example.jpg)
 
@@ -265,9 +196,28 @@ Open any image in `reprojections\` to see detected vs. reprojected corners:
 - Green and red markers should align closely
 - Systematic misalignment may indicate calibration issues
 
-### 6.4 Calibration Parameters
+### 5.4 Polar Error Plots
 
-Open `calibration\calibration_my-camera.json` to see the numerical parameters:
+The polar error plots show every reprojected corner placed by its viewing angle: the radius is the incidence angle from the optical axis (center = straight ahead, outer ring = edge of the field of view) and the angle is the azimuth around the axis. Color and size encode the reprojection error, so you can see where in the lens's field of view the model fits well and where it does not.
+
+Two versions are produced: error in pixels and error in degrees (the angular error, computed from the derivative of the projection model):
+
+![Polar Error (Pixel)](images/polar_error_pixel_example.png)
+
+*Figure: Reprojection error in pixels, plotted in polar coordinates.*
+
+![Polar Error (Angular)](images/polar_error_degrees_example.png)
+
+*Figure: Reprojection error in degrees.*
+
+**What to look for:**
+- Errors should be small (cyan) and spread evenly across the field of view.
+- Clusters of large errors (magenta) at a particular radius or azimuth point to a region where the model fits poorly.
+- Good angular coverage of points out to the outer ring means your images sampled the full field of view.
+
+### 5.5 Calibration Parameters
+
+Open `calibration/calibration_my-camera.json` to see the numerical parameters:
 
 ```json
 {
@@ -285,73 +235,3 @@ Open `calibration\calibration_my-camera.json` to see the numerical parameters:
 - `distortion_center`: Optical center in pixels
 - `stretch_matrix`: Sensor-to-lens alignment compensation
 - `rms_overall`: Overall reprojection error (pixels)
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. "Extracted chessboard corners with success = 0/30"
-
-**Cause**: chessboard not detected in any images.
-
-**Solutions:**
-
-- Verify you set the chessboard's **inner** corners (e.g., 9x5), not the number of squares
-- Ensure images are sharp and well-lit
-- Use `--check` flag for manual correction of corner detections
-- Check that images are in supported formats (.jpg, .png, etc.)
-
-#### 2. "Linear estimation failed"
-
-**Cause**: Insufficient or poor-quality detections.
-
-**Solutions:**
-
-- Use more images (at least 15-20)
-- Ensure images of the chessboard cover the entire field of view
-- Include images with various tilts and angles
-- Remove blurry or poorly lit images
-
-#### 3. High reprojection error (> 1.0 pixels)
-
-**Cause**: Poor calibration quality.
-
-**Solutions:**
-
-- Check for outlier images in the reprojection error plot
-- Remove images with high individual error
-- Recalibrate with more diverse viewpoints
-
-#### 4. "ModuleNotFoundError: No module named 'pyocamcalib'"
-
-**Cause**: Virtual environment not activated or package not installed.
-
-**Solution:**
-```powershell
-cd C:\path\to\py-OCamCalib
-.venv\Scripts\Activate.ps1
-pip install -e .
-python -m pyocamcalib.script.calibration_script ...
-```
-
-#### 5. PowerShell execution policy error
-
-**Cause**: PowerShell script execution is restricted.
-
-**Solution:**
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-#### 6. "No module named 'requirements'"
-
-**Cause**: Typo in pip install command.
-
-**Solution:**
-```powershell
-pip install -r requirements.txt
-```
-
-Make sure to include the `-r` flag and the `.txt` extension.
