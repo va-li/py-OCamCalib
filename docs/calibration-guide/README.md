@@ -151,6 +151,9 @@ output/my-camera/
 │   └── corner_detections_my-camera.pickle
 ├── reprojections/
 │   └── reprojection_*.png             # Per-image reprojection overlays
+├── polar_plots/
+│   ├── polar_error_pixel_my-camera.png
+│   └── polar_error_degrees_my-camera.png
 ├── Mean_reprojection_error_my-camera.png
 └── Model_projection_my-camera.png
 ```

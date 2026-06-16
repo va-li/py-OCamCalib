@@ -51,8 +51,10 @@ def main(working_dir: str,
     output_base.mkdir(parents=True, exist_ok=True)
     corners_dir = output_base / "corners_detection"
     calib_dir = output_base / "calibration"
+    polar_dir = output_base / "polar_plots"
     corners_dir.mkdir(parents=True, exist_ok=True)
     calib_dir.mkdir(parents=True, exist_ok=True)
+    polar_dir.mkdir(parents=True, exist_ok=True)
 
     if corners_path is None:
         my_calib_engine.detect_corners(check=check)
@@ -66,6 +68,8 @@ def main(working_dir: str,
     my_calib_engine.show_model_projection(save_directory=str(output_base))
     my_calib_engine.show_mean_reprojection_error(save_directory=str(output_base))
     my_calib_engine.show_reprojection(save_directory=str(output_base))
+    my_calib_engine.show_polar_error(error_type='pixel', save_directory=str(polar_dir))
+    my_calib_engine.show_polar_error(error_type='degrees', save_directory=str(polar_dir))
 
 
 if __name__ == "__main__":
