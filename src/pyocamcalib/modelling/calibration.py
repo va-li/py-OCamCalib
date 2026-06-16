@@ -476,6 +476,205 @@ class CalibrationEngine:
 
         return r_calibrated, theta
 
+    def _compute_angular_error_derivative(
+        self,
+        rho: np.ndarray
+    ) -> np.ndarray:
+        """
+        Compute the derivative dθ/dρ for the camera projection model.
+        
+        The projection model is defined by:
+        - z = P(ρ) where P is the Taylor polynomial
+        - θ = arctan(ρ / z)
+        
+        The derivative is:
+        dθ/dρ = (z - ρ * dP/dρ) / (z² + ρ²)
+        
+        :param rho: Radius values (distance from distortion center in pixels)
+        :return: dθ/dρ values in radians per pixel
+        """
+        # Compute z = P(ρ) using the Taylor polynomial
+        # taylor_coefficient is [a0, a1, a2, ...] for P(ρ) = a0 + a1*ρ + a2*ρ² + ...
+        z = np.polyval(self.taylor_coefficient[::-1], rho)
+        
+        # Compute dP/dρ (derivative of the polynomial)
+        taylor_derivative = np.polyder(self.taylor_coefficient[::-1])
+        dz_drho = np.polyval(taylor_derivative, rho)
+        
+        # Compute dθ/dρ = (z - ρ * dz/dρ) / (z² + ρ²)
+        denominator = z**2 + rho**2
+        # Avoid division by zero
+        denominator = np.where(denominator < 1e-10, 1e-10, denominator)
+        dtheta_drho = (z - rho * dz_drho) / denominator
+        
+        return dtheta_drho
+
+    def show_polar_error(
+        self,
+        error_type: str = 'pixel',
+        save_directory: Optional[str] = None
+    ):
+        """
+        Show a polar plot of reprojected points with error-encoded color and size.
+        
+        :param error_type: 'pixel' for pixel error, 'degrees' for angular error
+        :param save_directory: Optional directory to save the figure
+        """
+        from matplotlib.colors import Normalize, LinearSegmentedColormap
+        from matplotlib.cm import ScalarMappable
+        
+        if not self.detections:
+            raise ValueError('Detections is empty. You first need to detect corners.')
+        
+        if self.extrinsics_t is None or self.taylor_coefficient is None:
+            raise ValueError('Camera parameters are empty. You first need to calibrate.')
+        
+        # Collect all reprojected points and errors
+        all_angles = []  # Polar angle (azimuth) in radians
+        all_radii = []   # Radius from distortion center in pixels
+        all_errors = []  # Error magnitude
+        all_incident_angles = []  # Incident angles in degrees
+        
+        valid_image_paths = self.get_valid_image_paths()
+        
+        for i, img_path in enumerate(valid_image_paths):
+            image_points = np.array(self.detections[img_path]['image_points'])
+            world_points = np.array(self.detections[img_path]['world_points'])
+            extrinsics = self.extrinsics_t[i]
+            
+            # Compute reprojected points
+            _, _, reprojected_image_points = get_reprojection_error(
+                image_points, world_points,
+                self.taylor_coefficient, extrinsics,
+                self.distortion_center, self.stretch_matrix
+            )
+            
+            # Compute reprojection error (reprojected - detected)
+            errors = reprojected_image_points - image_points
+            error_magnitude = np.linalg.norm(errors, axis=1)  # Pixel error
+            
+            # Compute polar coordinates relative to distortion center
+            dc = self.distortion_center
+            points_relative = reprojected_image_points - dc
+            radii = np.sqrt(points_relative[:, 0]**2 + points_relative[:, 1]**2)
+            angles = np.arctan2(points_relative[:, 1], points_relative[:, 0])
+            
+            # Compute incident angles for the radial axis
+            # Transform reprojected points to camera coordinate system to get incident angles
+            # First, un-distort: apply inverse stretch transform
+            points_undistorted = points_relative @ np.linalg.inv(self.stretch_matrix).T
+            rho = np.sqrt(points_undistorted[:, 0]**2 + points_undistorted[:, 1]**2)
+            # Use the Taylor polynomial to get z
+            z = np.polyval(self.taylor_coefficient[::-1], rho)
+            # Incident angle: theta = arctan(rho / z)
+            incident_angles_rad = np.arctan2(rho, z)
+            incident_angles_deg = np.degrees(incident_angles_rad)
+            
+            if error_type == 'degrees':
+                # Convert pixel error to angular error using the projection model derivative
+                dtheta_drho = self._compute_angular_error_derivative(radii)
+                # error_degrees = error_pixels * dθ/dρ * (180/π)
+                error_magnitude = error_magnitude * np.abs(dtheta_drho) * (180.0 / np.pi)
+            
+            all_angles.extend(angles.tolist())
+            all_radii.extend(radii.tolist())
+            all_errors.extend(error_magnitude.tolist())
+            all_incident_angles.extend(incident_angles_deg.tolist())
+        
+        all_angles = np.array(all_angles)
+        all_radii = np.array(all_radii)
+        all_errors = np.array(all_errors)
+        all_incident_angles = np.array(all_incident_angles)
+        
+        # Create the polar plot
+        fig = plt.figure(figsize=FIG_SIZE)
+        ax = fig.add_subplot(111, projection='polar')
+        
+        # Set up the color scale - bound at 1 pixel (or equivalent in degrees)
+        if error_type == 'pixel':
+            vmax = 1.0  # Bound color scale at 1 pixel
+            error_unit = 'pixels'
+        else:
+            # For degrees, compute the equivalent bound using max dθ/dρ
+            max_dtheta_drho = np.max(np.abs(self._compute_angular_error_derivative(np.array(all_radii))))
+            vmax = max_dtheta_drho * (180.0 / np.pi)  # 1 pixel in degrees
+            error_unit = 'degrees'
+        
+        # Create custom cyan-to-magenta colormap
+        # Cyan: (0, 1, 1), Magenta: (1, 0, 1)
+        colors = [(0.0, 1.0, 1.0),   # Cyan for low errors
+                  (1.0, 0.0, 1.0)]   # Magenta for high errors
+        cmap = LinearSegmentedColormap.from_list('cyan_magenta', colors, N=256)
+        
+        # Smaller default point sizes
+        min_size = 8
+        max_size = 50
+        
+        # Normalize errors for color (0 to vmax, capped)
+        norm = Normalize(vmin=0, vmax=vmax)
+        norm_colors = norm(all_errors)
+        
+        # Normalize sizes (use sqrt for better visual perception)
+        sizes = min_size + (max_size - min_size) * np.sqrt(np.clip(all_errors / vmax, 0, 1))
+        
+        # Scatter plot in polar coordinates - use incident angles for radial position
+        scatter = ax.scatter(all_angles, all_incident_angles, c=norm_colors, s=sizes, 
+                             cmap=cmap, alpha=0.8, edgecolors='none')
+        
+        # Add colorbar
+        sm = ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, pad=0.1, shrink=0.8)
+        cbar.set_label(f'Reprojection Error ({error_unit})', fontsize=12)
+        
+        # Set plot title
+        if error_type == 'pixel':
+            title = f'Polar Plot of Reprojection Errors (Pixel)\n{self.cam_name}'
+        else:
+            title = f'Polar Plot of Reprojection Errors (Angular)\n{self.cam_name}'
+        
+        ax.set_title(title, fontsize=14, pad=20)
+        
+        # Set radial limits: 0 to 90 degrees (or max incident angle if less)
+        max_incident = min(90, np.max(all_incident_angles) * 1.1)
+        ax.set_ylim(0, max_incident)
+        
+        # Add radial grid lines at meaningful incident angles
+        ax.set_rgrids([30, 60, 90] if max_incident >= 90 else [20, 40, 60],
+                      labels=[f'{int(r)}°' for r in ([30, 60, 90] if max_incident >= 90 else [20, 40, 60])])
+        
+        # Add angular grid
+        ax.set_thetagrids([0, 45, 90, 135, 180, 225, 270, 315],
+                          labels=['0°', '45°', '90°', '135°', '180°', '225°', '270°', '315°'])
+        
+        # Add distortion center marker (at origin)
+        ax.scatter([0], [0], c='cyan', s=100, marker='+', label='Distortion Center', 
+                   linewidths=1, zorder=10)
+        
+        ax.legend(loc='upper right', bbox_to_anchor=(1.1, 1.1))
+        
+        # Save if directory provided
+        if save_directory:
+            save_dir = Path(save_directory)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            suffix = 'pixel' if error_type == 'pixel' else 'degrees'
+            plt.savefig(save_dir / f'polar_error_{suffix}_{self.cam_name}.png', 
+                        dpi=DPI, bbox_inches='tight')
+        
+        plt.show()
+
+    def show_polar_error_both(
+        self,
+        save_directory: Optional[str] = None
+    ):
+        """
+        Show both pixel and angular error polar plots.
+        
+        :param save_directory: Optional directory to save the figures
+        """
+        self.show_polar_error(error_type='pixel', save_directory=save_directory)
+        self.show_polar_error(error_type='degrees', save_directory=save_directory)
+
     def save_calibration(self, directory: str):
         """
         Save calibration results in .json file
